@@ -1,0 +1,104 @@
+import org.openapitools.generator.gradle.plugin.tasks.GenerateTask
+
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '3.2.3'
+	id 'io.spring.dependency-management' version '1.1.4'
+	id 'org.openapi.generator' version '7.3.0'
+	id 'de.undercouch.download' version '5.6.0'
+}
+
+group = 'com.daliaslibrary'
+version = '0.0.1-SNAPSHOT'
+
+java {
+	sourceCompatibility = '17'
+}
+
+configurations {
+	compileOnly {
+		extendsFrom annotationProcessor
+	}
+//	generatedImplementation.extendsFrom(implementation)
+//	generatedRuntimeOnly.extendsFrom(runtimeOnly)
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	implementation 'org.springframework.boot:spring-boot-starter-data-jdbc'
+	implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
+	implementation 'org.springframework.boot:spring-boot-starter-security'
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+	compileOnly 'org.projectlombok:lombok'
+	annotationProcessor 'org.projectlombok:lombok'
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testImplementation 'org.springframework.security:spring-security-test'
+}
+
+sourceSets {
+	generated {
+		java {
+			srcDirs 'build/generated'
+		}
+	}
+	main {
+		java {
+			compileClasspath += sourceSets.generated.output
+			runtimeClasspath += sourceSets.generated.output
+		}
+	}
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}
+
+task printSourceSetInformation(){
+
+	doLast{
+		sourceSets.each { srcSet ->
+			println "["+srcSet.name+"]"
+			print "-->Source directories: "+srcSet.allJava.srcDirs+"\n"
+			print "-->Output directories: "+srcSet.output.classesDirs.files+"\n"
+			print "-->Compile classpath:\n"
+			srcSet.compileClasspath.files.each {
+				print "  "+it.path+"\n"
+			}
+			println ""
+		}
+	}
+}
+
+tasks.register('downloadApiSpec', Download) {
+	src "https://raw.githubusercontent.com/Dalia-21/dalias-library-api-specs/master/openapi-specs/dalias-library-spec.yml"
+	dest layout.buildDirectory
+	onlyIfModified true
+}
+
+tasks.register('generateDaliasLibraryServiceApi', GenerateTask) {
+	inputSpec = layout.buildDirectory.file("dalias-library-spec.yml").get().getAsFile().toString()
+	generatorName = "spring"
+	outputDir = layout.buildDirectory.dir("generated").get().toString()
+	apiPackage = "com.daliaslibrary.library.v1.api"
+	modelPackage = "com.daliaslibrary.library.v1.model"
+	configOptions = [
+	        interfaceOnly: 'true'
+	]
+}
+
+tasks.register('copyGeneratedClasses', Copy) {
+	from 'build/generated/'
+	into 'src/generated/'
+
+	exclude '.openapi-generator'
+	exclude 'sources'
+	exclude '.openapi-generator-ignore'
+	exclude 'README.md'
+}
+
+generateDaliasLibraryServiceApi.dependsOn('downloadApiSpec')
+compileGeneratedJava.dependsOn('generateDaliasLibraryServiceApi')
+compileJava.dependsOn('compileGeneratedJava')
